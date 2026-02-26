@@ -45,28 +45,32 @@ def log_attendance(name, score, status):
             return
 
     last_logged[name] = current_time
-    file_exists = os.path.isfile("attendance.csv")
 
-    with open("attendance.csv", mode="a", newline="") as file:
+    file_exists = os.path.isfile(attendance_filename)
+
+    with open(attendance_filename, mode="a", newline="") as file:
         writer = csv.writer(file)
 
         if not file_exists:
-            writer.writerow(["Name", "Date", "Time", "Score", "Status"])
+            writer.writerow(["Class", class_name])
+            writer.writerow(["Subject", subject_name])
+            writer.writerow(["Teacher", teacher_name])
+            writer.writerow(["Date", today_date])
+            writer.writerow([])  # empty line
+            writer.writerow(["Name", "Time", "Score", "Status"])
 
         now = datetime.now()
         writer.writerow([
             name,
-            now.strftime("%d-%m-%Y"),
             now.strftime("%H:%M:%S"),
             round(score, 2),
             status
         ])
 
-
 # ---------------------------
 # Load YOLO Model
 # ---------------------------
-model = YOLO("yolov8n.pt")   # lightweight & fast
+model = YOLO("yolov8n.pt")   
 
 DEVICE_CLASSES = ["cell phone", "laptop"]
 
@@ -103,6 +107,36 @@ def eye_aspect_ratio(landmarks, eye_indices, w, h):
     horizontal = hypot(*(p1 - p4))
 
     return (vertical1 + vertical2) / (2.0 * horizontal)
+
+
+
+# -------------------------
+# SESSION DETAILS INPUT
+# -------------------------
+print("\n=== Enter Session Details ===")
+teacher_name = input("Enter Teacher Name: ").strip().replace(" ", "_")
+subject_name = input("Enter Subject Name: ").strip().replace(" ", "_")
+class_name = input("Enter Class Name: ").strip().replace(" ", "_")
+batch_name = input("Enter Batch Name: ").strip().replace(" ", "_")
+
+today_date = datetime.now().strftime("%d-%m-%Y")
+
+# -------------------------
+# FOLDER CREATION
+# -------------------------
+main_folder = "Attendance_Records"
+batch_folder = os.path.join(main_folder, batch_name)
+date_folder = os.path.join(batch_folder, today_date)
+
+os.makedirs(date_folder, exist_ok=True)
+
+attendance_filename = os.path.join(
+    date_folder,
+    f"Attendance_{class_name}_{subject_name}_{teacher_name}.csv"
+)
+print(f"\nAttendance File: {attendance_filename}")
+
+
 
 # -------------------------
 # Main Logic
