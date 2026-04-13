@@ -155,6 +155,12 @@ class AttendanceApp:
         self.batch_entry = tk.Entry(container)
         self.batch_entry.pack(fill="x", pady=(0, 16))
 
+        register_actions = tk.Frame(container)
+        register_actions.pack(fill="x", pady=(0, 16))
+        tk.Button(
+            register_actions, text="Register New User", command=self.open_register_window
+        ).pack(side="left")
+
         controls = tk.Frame(container)
         controls.pack(fill="x", pady=(0, 16))
         tk.Button(controls, text="Start System", command=self.start_system).pack(
@@ -182,6 +188,99 @@ class AttendanceApp:
             justify="left",
         )
         self.file_label.pack(anchor="w", pady=(12, 0))
+
+    # -------------------------
+    # Registration Flow
+    # -------------------------
+    def open_register_window(self):
+        if hasattr(self, "register_window") and self.register_window.winfo_exists():
+            self.register_window.focus()
+            return
+
+        self.register_window = tk.Toplevel(self.root)
+        self.register_window.title("Register New User")
+        self.register_window.geometry("400x160")
+
+        wrapper = tk.Frame(self.register_window, padx=20, pady=20)
+        wrapper.pack(fill="both", expand=True)
+
+        tk.Label(wrapper, text="Enter Name").pack(anchor="w")
+        self.register_name_entry = tk.Entry(wrapper)
+        self.register_name_entry.pack(fill="x", pady=(0, 12))
+
+        tk.Button(
+            wrapper, text="Start Registration", command=self.register_user
+        ).pack(anchor="w")
+
+    def register_user(self):
+        name = self.register_name_entry.get().strip().replace(" ", "_")
+        if not name:
+            messagebox.showerror("Error", "Please enter a name to register.")
+            return
+
+        file_path = f"{name}.pkl"
+        if os.path.exists(file_path):
+            overwrite = messagebox.askyesno(
+                "Confirm Overwrite",
+                f"{name} already exists. Overwrite?",
+            )
+            if not overwrite:
+                return
+
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            messagebox.showerror("Camera Error", "Could not open camera.")
+            return
+
+        captured_frame = None
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    messagebox.showerror("Camera Error", "Failed to read from camera.")
+                    return
+
+                cv2.putText(
+                    frame,
+                    "Press 'S' to capture, 'Q' to cancel",
+                    (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
+                cv2.imshow("Register Face", frame)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("s"):
+                    captured_frame = frame.copy()
+                    break
+                if key == ord("q"):
+                    return
+        finally:
+            cap.release()
+            cv2.destroyWindow("Register Face")
+
+        if captured_frame is None:
+            return
+
+        try:
+            embedding = DeepFace.represent(
+                img_path=captured_frame,
+                model_name="Facenet",
+                enforce_detection=False,
+            )[0]["embedding"]
+        except Exception:
+            messagebox.showerror("Error", "Failed to generate face embedding.")
+            return
+
+        with open(file_path, "wb") as file:
+            pickle.dump(embedding, file)
+
+        self.database[name] = embedding
+        self.update_gui(status=f"Registered: {name}")
+        messagebox.showinfo("Success", f"{name} registered successfully.")
+        if hasattr(self, "register_window") and self.register_window.winfo_exists():
+            self.register_window.destroy()
 
     # -------------------------
     # GUI Update Helper
