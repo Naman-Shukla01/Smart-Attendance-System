@@ -1,2 +1,4 @@
 Attendance_Records/
 Attendance_Records/*
+*.pkl
+faculty.json

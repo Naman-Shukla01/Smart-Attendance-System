@@ -8,6 +8,7 @@ from datetime import datetime
 from math import hypot
 from tkinter import messagebox, ttk
 
+import json
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -27,11 +28,11 @@ LEFT_EYE = [33, 160, 158, 133, 153, 144]
 EAR_THRESHOLD = 0.20
 THRESHOLD = 0.7
 LOCK_TIME = 5
+FACULTY_FILE = "faculty.json"
 
 # -------------------------
 # GUI Dropdown Options
 # -------------------------
-# Edit these lists as needed.
 TEACHER_OPTIONS = ["KKR", "Teacher_2", "Teacher_3"]
 CLASS_OPTIONS = ["IT61", "IT62", "IT63"]
 
@@ -48,6 +49,16 @@ def load_database():
                 database[name] = pickle.load(file)
     return database
 
+def load_faculty():
+    if not os.path.exists(FACULTY_FILE):
+        return []
+    with open(FACULTY_FILE, "r") as f:
+        return json.load(f)
+
+
+def save_faculty(faculty_list):
+    with open(FACULTY_FILE, "w") as f:
+        json.dump(faculty_list, f, indent=4)
 
 # -------------------------
 # Utility Functions
@@ -90,14 +101,163 @@ def eye_aspect_ratio(landmarks, eye_indices, width, height):
 # -------------------------
 # GUI + Recognition App
 # -------------------------
-class AttendanceApp:
+class HomePage(tk.Frame):
+        def __init__(self, parent, controller):
+            super().__init__(parent)
+
+            wrapper = tk.Frame(self)
+            wrapper.place(relx=0.5, rely=0.5, anchor="center")
+            tk.Label(self, text="Smart Attendance System", font=("Arial", 18)).pack(pady=20)
+
+            tk.Button(self, text="Take Attendance", width=25,
+                    command=lambda: controller.show_frame(AttendancePage)).pack(pady=10)
+
+            tk.Button(self, text="Register Student", width=25,
+                    command=lambda: controller.show_frame(RegisterPage)).pack(pady=10)
+
+            tk.Button(self, text="Admin Panel", width=25,
+                    command=lambda: controller.show_frame(AdminPage)).pack(pady=10)
+
+            tk.Button(self, text="Exit", width=25,
+                    command=controller.on_close).pack(pady=10)
+            
+class AttendancePage(tk.Frame):
+        def __init__(self, parent, controller):
+            super().__init__(parent)
+
+            wrapper = tk.Frame(self)
+            wrapper.place(relx=0.5, rely=0.5, anchor="center")
+
+            self.controller = controller
+
+            tk.Label(self, text="Take Attendance", font=("Arial", 16)).pack(pady=10)
+
+            tk.Label(self, text="Teacher Name").pack()
+            self.teacher_combo = ttk.Combobox(self, values=controller.faculty_list)
+            self.teacher_combo.pack()
+
+            tk.Label(self, text="Subject").pack()
+            self.subject_entry = tk.Entry(self)
+            self.subject_entry.pack()
+
+            tk.Label(self, text="Class").pack()
+            self.class_combo = ttk.Combobox(self, values=CLASS_OPTIONS)
+            self.class_combo.pack()
+
+            tk.Label(self, text="Batch").pack()
+            self.batch_entry = tk.Entry(self)
+            self.batch_entry.pack()
+
+            tk.Button(self, text="Start",
+                    command=controller.start_system).pack(pady=10)
+
+            tk.Button(self, text="Stop",
+                    command=controller.stop_system).pack()
+
+            tk.Button(self, text="Back",
+                    command=lambda: controller.show_frame(HomePage)).pack(pady=10)
+            
+        def refresh_faculty(self):
+            self.teacher_combo['values'] = self.controller.faculty_list
+    
+class RegisterPage(tk.Frame):
+        def __init__(self, parent, controller):
+            super().__init__(parent)
+
+            wrapper = tk.Frame(self)
+            wrapper.place(relx=0.5, rely=0.5, anchor="center")
+            
+            tk.Label(self, text="Register Student", font=("Arial", 16)).pack(pady=20)
+
+            tk.Button(self, text="Start Registration",
+                    command=controller.open_register_window).pack(pady=10)
+
+            tk.Button(self, text="Back",
+                    command=lambda: controller.show_frame(HomePage)).pack(pady=10)    
+    
+class AdminPage(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+
+        self.controller = controller
+
+        wrapper = tk.Frame(self)
+        wrapper.place(relx=0.5, rely=0.5, anchor="center")
+
+        tk.Label(wrapper, text="Admin Panel", font=("Arial", 16)).pack(pady=10)
+
+        # Entry for faculty name
+        self.name_entry = tk.Entry(wrapper, width=25)
+        self.name_entry.pack(pady=5)
+
+        # Add button
+        tk.Button(wrapper, text="Add Faculty", width=25,
+                  command=self.add_faculty).pack(pady=5)
+
+        # Remove dropdown
+        self.remove_combo = ttk.Combobox(wrapper, values=self.controller.faculty_list, width=23)
+        self.remove_combo.pack(pady=5)
+
+        tk.Button(wrapper, text="Remove Faculty", width=25,
+                  command=self.remove_faculty).pack(pady=5)
+
+        tk.Button(wrapper, text="Back",
+                  command=lambda: controller.show_frame(HomePage)).pack(pady=10)
+
+    # -------------------------
+    # Add Faculty
+    # -------------------------
+    def add_faculty(self):
+        name = self.name_entry.get().strip()
+
+        if not name:
+            messagebox.showerror("Error", "Enter faculty name")
+            return
+
+        if name in self.controller.faculty_list:
+            messagebox.showerror("Error", "Faculty already exists")
+            return
+
+        self.controller.faculty_list.append(name)
+        save_faculty(self.controller.faculty_list)
+
+        self.refresh_ui()
+        messagebox.showinfo("Success", f"{name} added")
+
+    # -------------------------
+    # Remove Faculty
+    # -------------------------
+    def remove_faculty(self):
+        name = self.remove_combo.get()
+
+        if name not in self.controller.faculty_list:
+            messagebox.showerror("Error", "Select valid faculty")
+            return
+
+        self.controller.faculty_list.remove(name)
+        save_faculty(self.controller.faculty_list)
+
+        self.refresh_ui()
+        messagebox.showinfo("Success", f"{name} removed")
+
+    # -------------------------
+    # Refresh UI
+    # -------------------------
+    def refresh_ui(self):
+        self.remove_combo['values'] = self.controller.faculty_list
+
+        # Update Attendance Page dropdown
+        attendance_page = self.controller.frames[AttendancePage]
+        attendance_page.refresh_faculty()
+
+class AttendanceApp(tk.Frame):
     def __init__(self):
         # ---------------------------
         # Load YOLO Model
         # ---------------------------
         self.database = load_database()
         self.model = YOLO("yolov8n.pt")
-
+            
         # -------------------------
         # MediaPipe Setup
         # -------------------------
@@ -125,70 +285,35 @@ class AttendanceApp:
         self.root.title("Smart Face Attendance System")
         self.root.geometry("500x460")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
+        
+        self.faculty_list = load_faculty()
         self.build_gui()
+
 
     # -------------------------
     # GUI Layout
     # -------------------------
     def build_gui(self):
-        container = tk.Frame(self.root, padx=20, pady=20)
-        container.pack(fill="both", expand=True)
+        self.container = tk.Frame(self.root)
+        
+        wrapper = tk.Frame(self.root)
+        wrapper.place(relx=0.5, rely=0.5, anchor="center")
+        self.container.pack(fill="both", expand=True)
 
-        tk.Label(container, text="Teacher Name").pack(anchor="w")
-        self.teacher_combo = ttk.Combobox(container, values=TEACHER_OPTIONS)
-        self.teacher_combo.pack(fill="x", pady=(0, 10))
-        if TEACHER_OPTIONS:
-            self.teacher_combo.set(TEACHER_OPTIONS[0])
+        self.frames = {}
 
-        tk.Label(container, text="Subject").pack(anchor="w")
-        self.subject_entry = tk.Entry(container)
-        self.subject_entry.pack(fill="x", pady=(0, 10))
+        for F in (HomePage, AttendancePage, RegisterPage, AdminPage):
+            frame = F(self.container, self)
+            self.frames[F] = frame
+            frame.grid(row=0, column=0, sticky="nsew")
 
-        tk.Label(container, text="Class").pack(anchor="w")
-        self.class_combo = ttk.Combobox(container, values=CLASS_OPTIONS)
-        self.class_combo.pack(fill="x", pady=(0, 10))
-        if CLASS_OPTIONS:
-            self.class_combo.set(CLASS_OPTIONS[0])
+        self.show_frame(HomePage)
 
-        tk.Label(container, text="Batch").pack(anchor="w")
-        self.batch_entry = tk.Entry(container)
-        self.batch_entry.pack(fill="x", pady=(0, 16))
+    def show_frame(self, page):
+        frame = self.frames[page]
+        frame.tkraise()
 
-        register_actions = tk.Frame(container)
-        register_actions.pack(fill="x", pady=(0, 16))
-        tk.Button(
-            register_actions, text="Register New User", command=self.open_register_window
-        ).pack(side="left")
-
-        controls = tk.Frame(container)
-        controls.pack(fill="x", pady=(0, 16))
-        tk.Button(controls, text="Start System", command=self.start_system).pack(
-            side="left"
-        )
-        tk.Button(controls, text="Stop System", command=self.stop_system).pack(
-            side="left", padx=(10, 0)
-        )
-
-        self.present_label = tk.Label(container, text="Present: 0", font=("Arial", 12))
-        self.present_label.pack(anchor="w", pady=4)
-
-        self.unknown_label = tk.Label(container, text="Unknown: 0", font=("Arial", 12))
-        self.unknown_label.pack(anchor="w", pady=4)
-
-        self.status_label = tk.Label(
-            container, text="Status: Waiting", font=("Arial", 12)
-        )
-        self.status_label.pack(anchor="w", pady=4)
-
-        self.file_label = tk.Label(
-            container,
-            text="Attendance File: Not started",
-            wraplength=440,
-            justify="left",
-        )
-        self.file_label.pack(anchor="w", pady=(12, 0))
-
+    
     # -------------------------
     # Registration Flow
     # -------------------------
